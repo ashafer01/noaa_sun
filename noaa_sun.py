@@ -133,13 +133,68 @@ def calc_sunrise_sunset_utc(rise, t, JD, latitude, longitude):
     return timeUTC
 
 
+def calc_jd_of_next_prev_rise_set(next, rise, t, JD, latitude, longitude, tz):
+    julianday = JD;
+    increment = 1.0 if next else -1.0
+
+    for _ in range(365):
+        try:
+            time = calc_sunrise_sunset_utc(rise, t, julianday, latitude, longitude)
+            break
+        except ValueError:
+            julianday += increment
+    else:
+        raise Exception('No rise/set this year at location')
+
+    timeLocal = time + tz * 60.0
+    while (timeLocal < 0.0) or (timeLocal >= 1440.0):
+        incr = 1 if timeLocal < 0 else -1
+        timeLocal += (incr * 1440.0)
+        julianday -= incr
+    return julianday;
+
+
+def calc_doy_from_jd(jd):
+    z = floor(jd + 0.5)
+    f = (jd + 0.5) - z
+    if z < 2299161:
+        A = z
+    else:
+        alpha = floor((z - 1867216.25)/36524.25)
+        A = z + 1 + alpha - floor(alpha/4)
+    B = A + 1524
+    C = floor((B - 122.1)/365.25)
+    D = floor(365.25 * C)
+    E = floor((B - D)/30.6001)
+    day = B - D - floor(30.6001 * E) + f
+    month = E - 1 if E < 14 else E - 13
+    year = C - 4716 if month > 2 else C - 4715
+
+    k = 1 if is_leap_year(year) else 2
+    doy = floor((275 * month)/9) - k * floor((month + 9)/12) + day -30;
+    return doy;
+
+
 def calc_sunrise_set(rise, T, JD, latitude, longitude, timezone):
     # rise = 1 for sunrise, 0 for sunset
-    time_utc = calc_sunrise_sunset_utc(rise, T, JD, latitude, longitude);
-    new_time_utc = calc_sunrise_sunset_utc(rise, T, JD + time_utc/1440.0, latitude, longitude); 
-    time_local = new_time_utc + (timezone * 60.0)
-    return time_local
-
+    try:
+        time_utc = calc_sunrise_sunset_utc(rise, T, JD, latitude, longitude);
+        new_time_utc = calc_sunrise_sunset_utc(rise, T, JD + time_utc/1440.0, latitude, longitude); 
+        time_local = new_time_utc + (timezone * 60.0)
+        return time_local
+    except ValueError:
+        doy = calc_doy_from_jd(JD)
+        if ((latitude > 66.4) and (doy > 79) and (doy < 267)) or ((latitude < -66.4) and ((doy < 83) or (doy > 263))):
+            if rise:
+                jdy = calc_jd_of_next_prev_rise_set(0, rise, JD, T, latitude, longitude, timezone)
+            else:
+                jdy = calc_jd_of_next_prev_rise_set(1, rise, JD, T, latitude, longitude, timezone)
+        else:
+            if rise:
+                jdy = calc_jd_of_next_prev_rise_set(1, rise, JD, T, latitude, longitude, timezone)
+            else:
+                jdy = calc_jd_of_next_prev_rise_set(0, rise, JD, T, latitude, longitude, timezone)
+        return jdy
 
 def calc_mean_obliquity_of_ecliptic(t):
     seconds = 21.448 - t*(46.8150 + t*(0.00059 - t*(0.001813)))
@@ -156,10 +211,7 @@ def calc_obliquity_correction(t):
 
 def calc_geom_mean_long_sun(t):
     L0 = 279.46646 + t * (36000.76983 + t*(0.0003032))
-    while L0 > 360.0:
-        L0 -= 360.0
-    while L0 < 0.0:
-        L0 += 360.0
+    L0 = L0 % 360
     return L0  # in degrees
 
 
