@@ -7,5 +7,5 @@ setup(
     author='Alex Shafer',
     author_email='ashafer@pm.me',
     url='https://github.com/ashafer01/noaa_sun'
-    py_modules=['noaa_sun'],
+    py_modules=['noaa_sun']
 )
